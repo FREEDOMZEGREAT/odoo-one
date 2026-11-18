@@ -1,0 +1,145 @@
+
+# =====================================================
+# ODOO 19 DOCKER COMPOSE CONFIGURATION
+# PostgreSQL 16 + Odoo 19
+# =====================================================
+
+# Define all services (containers) for our project.
+services:
+
+  # ---------------------------------------------------
+  # 1. POSTGRESQL DATABASE SERVICE
+  # ---------------------------------------------------
+  db:
+
+    # Official PostgreSQL version 16 image.
+    image: postgres:16
+
+    # Custom name for the database container.
+    container_name: odoo19-db
+
+    # Automatically restart unless manually stopped.
+    restart: unless-stopped
+
+    # Environment variables for PostgreSQL.
+    environment:
+
+      # Database username.
+      POSTGRES_USER: odoo
+
+      # Database password.
+      POSTGRES_PASSWORD: odoo_password
+
+      # Default database name.
+      POSTGRES_DB: postgres
+
+    # Persist database data.
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+    # Connect PostgreSQL to the Odoo network.
+    networks:
+      - odoo-network
+
+    # Check whether PostgreSQL is ready.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  # ---------------------------------------------------
+  # 2. ODOO 19 APPLICATION SERVICE
+  # ---------------------------------------------------
+  odoo:
+
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    # Custom name for the Odoo container.
+    container_name: odoo19-app
+
+    # Automatically restart the container.
+    restart: unless-stopped
+
+    # Wait until PostgreSQL is healthy.
+    depends_on:
+      db:
+        condition: service_healthy
+
+    # Database connection settings.
+    environment:
+
+      # PostgreSQL service name.
+      HOST: db
+
+      # PostgreSQL port.
+      PORT: 5432
+
+      # PostgreSQL username.
+      USER: odoo
+
+      # PostgreSQL password.
+      PASSWORD: odoo_password
+
+    # Mount local folders into the Odoo container.
+    volumes:
+
+      # Custom addons directory.
+      - ./custom-addons:/mnt/extra-addons
+
+      # Persist Odoo application data.
+      - odoo-data:/var/lib/odoo
+
+    # Expose container ports to the host computer.
+    ports:
+
+      # Odoo web interface.
+      - "8069:8069"
+
+      # Odoo live chat / gevent port.
+      - "8072:8072"
+
+    # Connect Odoo to the PostgreSQL network.
+    networks:
+      - odoo-network
+
+    # Start Odoo and specify its configuration directly.
+    command:
+      - odoo
+      - --db_host=db
+      - --db_port=5432
+      - --db_user=odoo
+      - --db_password=odoo_password
+      - --addons-path=/usr/lib/python3/dist-packages/odoo/addons,/mnt/extra-addons
+      - --admin-passwd=change_this_master_password
+      - --log-level=info
+
+
+# ---------------------------------------------------
+# 3. VOLUMES
+# ---------------------------------------------------
+
+# Define persistent storage for our containers.
+volumes:
+
+  # PostgreSQL database storage.
+  postgres-data:
+
+  # Odoo application storage.
+  odoo-data:
+
+
+# ---------------------------------------------------
+# 4. NETWORKS
+# ---------------------------------------------------
+
+# Define the network for container communication.
+networks:
+
+  # Network shared by Odoo and PostgreSQL.
+  odoo-network:
+    driver: bridge
+
